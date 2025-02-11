@@ -1,0 +1,94 @@
+pipeline {
+    agent any
+    
+    tools {
+        nodejs 'node16'
+        jdk 'jdk17'
+    }
+    
+    environment {
+            SCANNER_HOME=tool 'sonar-scanner'
+    }
+
+    stages {
+        stage ("clean workspace") {
+            steps {
+                cleanWs()
+            }
+        }
+        stage ("Git checkout") {
+            steps {
+                git branch: 'main', url: 'https://github.com/Sivagcppractice/Starbucks-DevSecOps-Project.git'
+            }
+        }
+        stage("Sonarqube Analysis "){
+            steps{
+                withSonarQubeEnv('sonar') {
+                    sh ''' $SCANNER_HOME/bin/sonar-scanner -Dsonar.projectName=starbucks \
+                    -Dsonar.projectKey=starbucks '''
+                }
+            }
+        }
+        stage("quality gate"){
+           steps {
+                script {
+                    waitForQualityGate abortPipeline: false, credentialsId: 'Sonar-token' 
+                }
+            } 
+        }
+        stage("Install NPM Dependencies") {
+            steps {
+                sh "npm install"
+            }
+        }
+        stage('OWASP FS SCAN') {
+            steps {
+                dependencyCheck additionalArguments: '--scan ./ --disableYarnAudit --disableNodeAudit --data /var/lib/dependency-check --noupdate', odcInstallation: 'DP-Check'
+                dependencyCheckPublisher pattern: '**/dependency-check-report.xml'
+            }
+        }
+        stage ("Trivy File Scan") {
+            steps {
+                sh "trivy fs . > trivy.txt"
+            }
+        }
+        stage ("Build Docker Image") {
+            steps {
+                sh "docker build -t starbucks ."
+            }
+        }
+        stage ("Tag & Push to DockerHub") {
+            steps {
+                script {
+                    withDockerRegistry(credentialsId: 'docker-token') {
+                        sh "docker tag starbucks gcpdemo2024/starbucks:latest "
+                        sh "docker push gcpdemo2024/starbucks:latest "
+                    }
+                }
+            }
+        } 
+         stage('Docker Scout Image') {
+            steps {
+                script{
+                   withDockerRegistry(credentialsId: 'docker-token', toolName: 'docker'){
+                       sh 'docker-scout quickview gcpdemo2024/starbucks:latest'
+                       sh 'docker-scout cves gcpdemo2024/starbucks:latest'
+                       sh 'docker-scout recommendations gcpdemo2024/starbucks:latest'
+                   }
+                }
+            }
+        }
+        stage ("Deploy to Conatiner") {
+            steps {
+                sh 'docker run -d --name starbucks -p 3000:3000 amonkincloud/starbucks:latest'
+            }
+        }
+
+    }
+    post {
+        always {
+            cleanWs()
+        }
+    }
+}
+
