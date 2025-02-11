@@ -83,12 +83,29 @@ pipeline {
                 sh 'docker run -d --name starbucks -p 3000:3000 gcpdemo2024/starbucks:latest'
             }
         }
-
+        stage ("Deploy to Kubernetes") {
+            steps {
+                script {
+                    dir('Kubernetes') {
+                        withKubeConfig(
+                            credentialsId: 'k8s-token', 
+                            clusterName: 'k8s-Master',
+                            namespace: 'starbucks',
+                            restrictKubeConfigAccess: false, 
+                            serverUrl: 'https://172.31.35.213:6443'
+                        ) {
+                            sh 'kubectl apply -f deployment.yml'
+                            sh 'kubectl apply -f service.yml'
+                        }
+                    }
+                }
+            }
+        }
     }
+    
     post {
         always {
             cleanWs()
         }
     }
 }
-
