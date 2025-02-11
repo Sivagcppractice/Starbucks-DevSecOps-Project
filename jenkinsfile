@@ -80,7 +80,7 @@ pipeline {
         }
         stage ("Deploy to Conatiner") {
             steps {
-                sh 'docker run -d --name starbucks -p 3000:3000 amonkincloud/starbucks:latest'
+                sh 'docker run -d --name starbucks -p 3000:3000 gcpdemo2024/starbucks:latest'
             }
         }
 
